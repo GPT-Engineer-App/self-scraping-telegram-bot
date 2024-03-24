@@ -1,0 +1,88 @@
+import os
+import time
+import schedule
+import telegram
+from telegram.ext import Updater, CommandHandler
+import onlyfans
+import tweepy
+import praw
+
+# Telegram bot token
+TELEGRAM_BOT_TOKEN = 'YOUR_TELEGRAM_BOT_TOKEN'
+
+# OnlyFans API credentials
+ONLYFANS_API_KEY = 'YOUR_ONLYFANS_API_KEY'
+ONLYFANS_API_SECRET = 'YOUR_ONLYFANS_API_SECRET'
+
+# Twitter API credentials
+TWITTER_CONSUMER_KEY = 'YOUR_TWITTER_CONSUMER_KEY'
+TWITTER_CONSUMER_SECRET = 'YOUR_TWITTER_CONSUMER_SECRET'
+TWITTER_ACCESS_TOKEN = 'YOUR_TWITTER_ACCESS_TOKEN'
+TWITTER_ACCESS_TOKEN_SECRET = 'YOUR_TWITTER_ACCESS_TOKEN_SECRET'
+
+# Reddit API credentials
+REDDIT_CLIENT_ID = 'YOUR_REDDIT_CLIENT_ID'
+REDDIT_CLIENT_SECRET = 'YOUR_REDDIT_CLIENT_SECRET'
+REDDIT_USERNAME = 'YOUR_REDDIT_USERNAME'
+REDDIT_PASSWORD = 'YOUR_REDDIT_PASSWORD'
+
+# Initialize Telegram bot
+bot = telegram.Bot(token=TELEGRAM_BOT_TOKEN)
+
+# Initialize OnlyFans API client
+onlyfans_api = onlyfans.OnlyFansAPI(api_key=ONLYFANS_API_KEY, api_secret=ONLYFANS_API_SECRET)
+
+# Initialize Twitter API client
+auth = tweepy.OAuthHandler(TWITTER_CONSUMER_KEY, TWITTER_CONSUMER_SECRET)
+auth.set_access_token(TWITTER_ACCESS_TOKEN, TWITTER_ACCESS_TOKEN_SECRET)
+twitter_api = tweepy.API(auth)
+
+# Initialize Reddit API client
+reddit = praw.Reddit(client_id=REDDIT_CLIENT_ID, client_secret=REDDIT_CLIENT_SECRET,
+                     username=REDDIT_USERNAME, password=REDDIT_PASSWORD, user_agent='profile_scraper')
+
+def scrape_and_send_data(update, context):
+    chat_id = update.effective_chat.id
+
+    # Scrape OnlyFans profile
+    onlyfans_posts = onlyfans_api.get_posts()
+    for post in onlyfans_posts:
+        message = f"OnlyFans - {post.username}\n"
+        message += f"Time: {post.created_at}\n"
+        message += f"Likes: {post.likes}\n"
+        message += f"Comments: {post.comments}\n\n"
+        bot.send_message(chat_id=chat_id, text=message)
+
+    # Scrape Twitter profile
+    twitter_tweets = twitter_api.user_timeline()
+    for tweet in twitter_tweets:
+        message = f"Twitter - {tweet.user.screen_name}\n"
+        message += f"Time: {tweet.created_at}\n"
+        message += f"Likes: {tweet.favorite_count}\n"
+        message += f"Retweets: {tweet.retweet_count}\n\n"
+        bot.send_message(chat_id=chat_id, text=message)
+
+    # Scrape Reddit profile
+    reddit_posts = reddit.redditor(REDDIT_USERNAME).submissions.new(limit=None)
+    for post in reddit_posts:
+        message = f"Reddit - {post.author}\n"
+        message += f"Time: {post.created_utc}\n"
+        message += f"Score: {post.score}\n"
+        message += f"Comments: {post.num_comments}\n\n"
+        bot.send_message(chat_id=chat_id, text=message)
+
+def start(update, context):
+    context.job_queue.run_repeating(scrape_and_send_data, interval=3600, first=0, context=update)
+
+def main():
+    updater = Updater(token=TELEGRAM_BOT_TOKEN, use_context=True)
+    dispatcher = updater.dispatcher
+
+    start_handler = CommandHandler('start', start)
+    dispatcher.add_handler(start_handler)
+
+    updater.start_polling()
+    updater.idle()
+
+if __name__ == '__main__':
+    main()
